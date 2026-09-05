@@ -1,0 +1,89 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile metadata",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "lastLoginAt": { "type": "number" }
+      },
+      "required": ["uid"]
+    },
+    "JournalEntry": {
+      "title": "JournalEntry",
+      "description": "Personal journal reflections and logs",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "title": { "type": "string", "maxLength": 300 },
+        "content": { "type": "string", "maxLength": 50000 },
+        "mood": { "type": "string", "maxLength": 50 },
+        "tags": { "type": "array" },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" },
+        "wordCount": { "type": "number" },
+        "aiReflection": { "type": "string" },
+        "aiSummary": { "type": "string" },
+        "metadata": { "type": "object" }
+      },
+      "required": ["id", "userId", "title", "content", "createdAt", "updatedAt"]
+    },
+    "Memory": {
+      "title": "Memory",
+      "description": "Extracted high-value life memories, goals, decisions, lessons, and intentions",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "title": { "type": "string", "maxLength": 300 },
+        "summary": { "type": "string", "maxLength": 2000 },
+        "type": {
+          "type": "string",
+          "enum": ["Goal", "Decision", "Idea", "Lesson", "Event", "Realization", "Intention"]
+        },
+        "sourceJournalEntryId": { "type": "string" },
+        "sourceJournalTitle": { "type": "string" },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" },
+        "tags": { "type": "array" },
+        "importance": { "type": "string", "enum": ["low", "medium", "high"] },
+        "metadata": { "type": "object" }
+      },
+      "required": ["id", "userId", "title", "summary", "type", "createdAt", "updatedAt"]
+    },
+    "GeminiInteraction": {
+      "title": "GeminiInteraction",
+      "description": "Multi-turn conversations and dialogue reflections with Gemini",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" },
+        "journalEntryId": { "type": "string" },
+        "messages": { "type": "array" }
+      },
+      "required": ["id", "userId", "title", "createdAt", "updatedAt", "messages"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}/journalEntries/{entryId}": {
+      "schema": { "$ref": "#/entities/JournalEntry" },
+      "description": "Personal journal documents owned by the authenticated user."
+    },
+    "/users/{userId}/memories/{memoryId}": {
+      "schema": { "$ref": "#/entities/Memory" },
+      "description": "Structured life memories extracted from user journal entries."
+    },
+    "/users/{userId}/interactions/{interactionId}": {
+      "schema": { "$ref": "#/entities/GeminiInteraction" },
+      "description": "Chat conversations and reflective dialogues with Gemini."
+    }
+  }
+}

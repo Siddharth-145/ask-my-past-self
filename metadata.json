@@ -1,0 +1,7 @@
+{
+  "name": "Ask My Past Self",
+  "description": "Personal Gemini Journal and Memory Retrieval application that grounds reflections in your historical journal memories.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
