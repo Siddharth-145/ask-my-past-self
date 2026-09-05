@@ -1,23 +1,70 @@
-# Ask My Past Self — Personal Gemini Journal Foundation
+# Ask My Past Self — A Gemini-Powered Personal Memory System
 
-A secure, production-ready, user-authenticated journaling web application built with **React**, **Google Gemini**, **Firebase Authentication (Google Sign-In)**, and **Cloud Firestore**.
+A secure, Gemini-powered personal memory system that lets users question their past, uncover patterns, and understand how their goals, decisions, ideas, and experiences evolve over time.
 
-This repository implements the secure foundation for the **"Ask My Past Self"** product, enabling users to maintain a private, owner-isolated reflection journal with multi-turn Gemini AI conversational guidance, structured metadata persistence, and strict owner isolation.
+Ask My Past Self transforms journal writing into a structured personal memory system. Instead of only analyzing an individual journal entry, the application extracts important memories from a user's writing and allows Gemini to retrieve, compare, and reason over those memories to produce grounded reflections about the user's past.
+
+---
+
+## 🧠 What Makes Ask My Past Self Different
+
+Most AI journaling tools focus on analyzing the current entry. Ask My Past Self focuses on the relationship between a user's past and present.
+
+The system turns important journal experiences into structured, owner-isolated memories and allows the user to question those memories later. Gemini can then:
+- retrieve relevant past memories,
+- compare earlier intentions with later actions,
+- trace how goals, ideas, and decisions evolved,
+- and provide grounded reflections supported by explicit evidence.
+
+The system is designed to avoid unsupported conclusions: relevant evidence is retrieved first, Gemini is given that historical evidence as untrusted data, and returned evidence references are validated against the authenticated user's candidate memories.
+
+---
+
+## 🔄 Core Experience
+
+**REMEMBER → ASK → UNDERSTAND → EVOLVE**
+
+- **REMEMBER** — Capture important goals, decisions, ideas, lessons, realizations, intentions, and events from journal entries.
+- **ASK** — Question your past about things you cared about, wanted to improve, decided, learned, or experienced.
+- **UNDERSTAND** — Compare past intentions with later writing and identify grounded relationships between memories.
+- **EVOLVE** — Trace how a goal, idea, decision, or intention progressed through stages such as intention, decision, action, progress, and reflection.
+
+The application also provides proactive Growth & Tension detection when a new journal entry has a high-confidence relationship with an existing memory.
 
 ---
 
 ## 🏗️ Architecture Overview
 
-- **Frontend**: React 19 + TypeScript + Vite + Tailwind CSS
+### Conceptual Architecture
+
+```
+Browser
+  ↓
+Firebase Authentication (Google Sign-In)
+  ↓
+Cloud Run / Express Backend (Port 3000)
+  ↓
+Verified User Identity (Cryptographically validated token)
+  ↓
+Cloud Firestore + Google Gemini (Authoritative memories + Grounded reasoning)
+  ↓
+Grounded Answer / Validated Evidence
+```
+
+### Technology Stack
+
+- **Frontend**: React 19 + TypeScript + Vite + Tailwind CSS (Editorial journal aesthetic, responsive desktop/tablet/mobile design)
 - **Backend Service**: Express.js server on Node.js / Google Cloud Run (Container Port `3000`)
-- **Authentication**: Firebase Authentication (Google Sign-In via OAuth popup)
-- **Database**: Cloud Firestore with owner-bound rules (`users/{userId}/...`)
-- **AI Engine**: Google Gemini API via `@google/genai` with automated resilient fallback ladder
-- **Secret Management**: Google Cloud Secret Manager / Server-side environment variable injection
+- **Authentication**: Firebase Authentication (Google Sign-In via OAuth popup, zero stored passwords)
+- **Database**: Cloud Firestore with strict owner-bound rules (`users/{userId}/...`)
+- **AI Engine**: Google Gemini API via `@google/genai` with automated resilient model fallback ladder (`gemini-3.6-flash` &rarr; `gemini-3.1-flash-lite` &rarr; `gemini-flash-latest` &rarr; `gemini-3.7-flash`)
+- **Secret Management**: Google Cloud Secret Manager with IAM-governed runtime service account access
 
 ---
 
 ## 🔒 Security & Threat Mitigation Summary
+
+The system is designed with defense-in-depth principles: Firebase-authenticated, strictly owner-isolated, server-verified, prompt-injection aware, and fail-closed.
 
 | Threat Zone | Identified Risk | Production Countermeasure |
 | :--- | :--- | :--- |
@@ -27,11 +74,18 @@ This repository implements the secure foundation for the **"Ask My Past Self"** 
 | **Memory & State** | Cross-user memory data leakage | Path-based owner-checking (`request.auth.uid == userId`) in `firestore.rules`; backend queries strictly scoped to authenticated user UID |
 | **Inter-System Communication** | Gemini service exhaustion / outages | Resilient fallback ladder (`gemini-3.6-flash` &rarr; `gemini-3.1-flash-lite` &rarr; `gemini-flash-latest` &rarr; `gemini-3.7-flash`) |
 
+### Core Security Tenets
+
+1. **Server-Derived Identity**: The client passes the current user's Firebase ID token via `Authorization: Bearer <idToken>`. The backend validates the cryptographic signature and derives the verified `userId`. Frontend-supplied `userId`, `uid`, or `ownerId` parameters in request bodies or query strings are strictly rejected.
+2. **Authoritative Production Memory Access**: In production (`NODE_ENV=production`), the server exclusively and authoritatively queries memories stored under `users/{verifiedUserId}/memories` using the Firebase Admin SDK with Application Default Credentials (ADC). The client is never authoritative for historical memory state.
+3. **Fail-Closed Principle**: If Firestore access is unavailable on the server in production, the endpoint immediately fails closed and returns a polite error response (`"Your past memories are temporarily unavailable. Please try again."`), never fabricating data or trusting unverified client input.
+4. **Untrusted Data Isolation**: All retrieved memory text passed to Gemini is encapsulated in isolated data blocks (`<candidate_memories>` or `<historical_evidence>`). Strict system instructions command the model never to execute instructions or commands contained within user-authored memories.
+5. **Evidence Validation**: Memory citations returned by the model are checked on the server against the candidate memory pool. Any citation with an invalid or unverified ID is stripped before the response reaches the user.
+6. **Temporal Grounding**: Reasoner responses do not generate relative temporal claims (such as *"By the end of the month"*) unless that exact timeframe is explicitly supported by retrieved evidence. When timeframes are not documented, neutral language (*"In a subsequent entry..."*, *"In a later reflection..."*) is enforced.
+
 ---
 
-## 🧭 Personal Memory Retrieval ("Ask My Past Self")
-
-### Target Production Architecture
+## 🧭 Memory Reasoning & Retrieval Engine
 
 ```
 Browser
@@ -49,30 +103,38 @@ Cloud Firestore (Authoritative Server-Side Query)
 users/{verifiedUid}/memories
   │
   ▼
+Memory Reasoning Orchestrator (Intent Classification)
+  │
+  ├── RETRIEVE  ── Specific memory lookup & factual recollection
+  ├── COMPARE   ── Intention vs. action analysis & follow-through
+  ├── EVOLVE    ── Longitudinal progression & multi-stage development
+  └── REFLECT   ── Synthesizing personal themes & retrospective insights
+  │
+  ▼
 Concept-Aware Ranking & Threshold Gating
   │
   ▼
 Google Gemini API (Server-Side Grounding with Untrusted Data Isolation)
   │
   ▼
-Grounded Answer + Validated Evidence Citations
+Server-Side Evidence Validation
   │
   ▼
-Browser
+Grounded Answer + Validated Evidence Citations
 ```
 
-The **Ask My Past Self** engine connects user inquiries directly with their historical memory vault:
+### Bounded Memory Reasoning Orchestrator
 
-1. **Authentication & Token Derivation**: The client passes the current user's Firebase ID token via `Authorization: Bearer <idToken>`. The backend validates the cryptographic signature and derives the verified `userId`. Frontend-supplied `userId`, `uid`, or `ownerId` parameters in request bodies or queries are strictly rejected.
-2. **Authoritative Server-Side Memory Retrieval**: In production (`NODE_ENV=production`), the server exclusively and authoritatively fetches all memories stored under `users/{verifiedUserId}/memories` using the Firebase Admin SDK and Google Cloud Application Default Credentials (ADC). The browser is **never** authoritative for memory data, and client memory payloads are completely ignored and rejected in production.
-3. **Fail-Closed Principle**: If Firestore access is unavailable on the server in production, the endpoint immediately fails closed and returns an error response (`"Your past memories are temporarily unavailable. Please try again."`), never fabricating data or trusting unverified client input.
-4. **Intent & Keyword Relevance Scoring**: Evaluates question tokens against memory titles (4x weight), tags (3.5x weight), summaries (2.5x weight), takeaways/quotes/action items (2x weight), and question intent archetypes (e.g. "goals", "decisions", "lessons") with dynamic scoring thresholds.
-5. **Zero-Hallucination Safe Fallback**: If no memories pass the relevance threshold, the system returns an immediate polite notice without making an ungrounded inference:
+The **Memory Reasoning Orchestrator** is a bounded reasoning workflow that:
+1. **Classifies User Intent**: Inspects the user's inquiry using deterministic keyword/regex pattern recognition alongside a fast semantic classification call to determine the primary cognitive operation:
+   - **`RETRIEVE`**: Factual lookup of past decisions, lessons, projects, or thoughts (e.g. *"What did I decide about my career in October?"*).
+   - **`COMPARE`**: Progress evaluation comparing past intentions with subsequent actions (e.g. *"Did I follow through on my commitment to learn security?"*).
+   - **`EVOLVE`**: Tracing progressive development over time across distinct milestones (e.g. *"How has my perspective on work-life balance changed?"*).
+   - **`REFLECT`**: Open-ended thematic synthesis across multiple memories (e.g. *"What recurring themes appear across my reflections?"*).
+2. **Relevance Scoring & Candidate Assembly**: Evaluates question tokens against memory titles (4x weight), tags (3.5x weight), summaries (2.5x weight), and takeaways/action items (2x weight) to select the most relevant memories.
+3. **Zero-Hallucination Threshold Gating**: If no candidate memories pass the relevance threshold, the system safely returns an immediate polite notice without making an ungrounded inference:
    > *"I couldn't find a relevant memory in your Past Self Vault for that question."*
-6. **Gemini Grounding & Untrusted Data Isolation**: When relevant memories exist, Gemini is invoked with strict grounding directives and a structured JSON schema. All memory texts are treated as untrusted user data with prompt-injection defenses. The model returns:
-   - `answer`: Grounded response referencing the user's past thoughts
-   - `confidence`: `high`, `medium`, or `low`
-   - `evidence`: Array of memory citations linking each supporting point to a specific memory ID and reason. Memory IDs and citations are validated on the server against the candidate list.
+4. **Grounding & Evidence Linking**: When relevant memories exist, Gemini synthesizes an empathetic, grounded answer referencing the user's past thoughts, assigning a confidence rating (`high`, `medium`, or `low`) and explicit evidence citations linking every claim to a specific memory ID.
 
 ---
 
@@ -92,7 +154,22 @@ The **Personal Journey** engine traces how a goal, intention, idea, or decision 
 
 ---
 
+## 🌱 Proactive Growth & Tension Detection
+
+When a user saves a new journal entry, the system can automatically detect meaningful connections to past memories:
+
+1. **Lightweight Semantic Match**: The newly written entry is evaluated against existing memories to locate potential alignments or divergences.
+2. **Balanced Cognitive Perspectives**:
+   - **Growth Detected (🌱)**: Identifies how current writing reinforces, deepens, or realizes an earlier intention or goal.
+   - **Tension Detected (⚡)**: Respectfully highlights constructive differences between current behavior and past commitments without judgment.
+   - **Pattern Continued (🔗)**: Traces ongoing themes extending from earlier realizations.
+3. **Actionable Presentation**: Displays an empathetic summary, side-by-side evidence comparison (*"In your new reflection"* vs. *"In your past memory"*), and a reflective question, with a direct link to inspect the memory in the Vault.
+
+---
+
 ## 📦 Cloud Firestore Data Model
+
+All user data is strictly partitioned by user UID:
 
 ```
 users/{userId}
@@ -150,6 +227,8 @@ users/{userId}
 
 ## 🛡️ Cloud Firestore Security Rules
 
+Owner isolation is enforced at the database level:
+
 ```javascript
 rules_version = '2';
 service cloud.firestore {
@@ -193,7 +272,7 @@ gcloud services enable \
   cloudbuild.googleapis.com
 ```
 
-### 2. Secret Manager Configuration
+### 2. Secret Management Configuration
 
 Store the Gemini API key securely in Google Cloud Secret Manager:
 
@@ -278,11 +357,11 @@ gcloud run services update ask-my-past-self \
    - Click **"Save to Memory Vault"**. Confirm that the memory is persisted to `users/{userId}/memories`.
    - Click the **"Memories"** tab in the navigation bar to explore the structured memory cards, filter by category/importance, search keywords, or click **"View Source Journal Entry"** to jump back to the original entry context.
 
-5. **Ask My Past Self (Personal Memory Retrieval)**:
+5. **Ask My Past Self (Personal Memory Retrieval & Reasoning)**:
    - Click the **"Ask Past Self"** tab in the navigation bar.
    - You can choose one of the suggested inquiry chips (e.g. *"What goals did I set for myself?"*, *"What were the things I wanted to improve?"*) or type a custom question.
    - Click **"Ask My Past Self"** (or press `Cmd+Enter` / `Ctrl+Enter`).
-   - The backend validates your cryptographically signed Firebase ID token, securely retrieves your memories from `users/{userId}/memories`, performs intent and keyword relevance scoring, and invokes Gemini with zero-hallucination grounding.
+   - The backend validates your cryptographically signed Firebase ID token, securely retrieves your memories from `users/{userId}/memories`, routes through the Memory Reasoning Orchestrator, and invokes Gemini with zero-hallucination grounding.
    - Verify the rendered response:
      - Clear, empathetic grounded answer synthesized from your past thoughts.
      - Confidence indicator badge (`High Grounding Confidence` or `Moderate Grounding`).
@@ -291,7 +370,12 @@ gcloud run services update ask-my-past-self \
    - Test asking an inquiry about a topic you have never written about (e.g., *"What did I learn about astrophysics?"*).
    - Verify that the system safely and politely states: *"I couldn't find a relevant memory in your Past Self Vault for that question."* and offers quick buttons to write a journal entry or browse the vault.
 
-6. **Growth & Tension Detection (Proactive Personal Reflection)**:
+6. **Personal Journey ("Evolve")**:
+   - From any memory card in the **Memories** vault, click **"View Journey"** (or **"See How This Evolved"**).
+   - The reasoner evaluates chronological milestones related to the memory topic.
+   - Verify the progression stages (e.g., Intention &rarr; Exploration &rarr; Action &rarr; Reflection), narrative summary, and validated memory citations linking each milestone to preserved memories.
+
+7. **Growth & Tension Detection (Proactive Personal Reflection)**:
    - In the **Daily Journal Studio**, write a reflection that directly connects with a prior recorded memory (for instance, if you have a memory about *"Setting a daily morning walk routine"*, write an entry about how you went walking today and felt invigorated, or conversely about how work deadlines disrupted morning walks).
    - Click **"Save Entry"**.
    - As the entry saves to Firestore, an analyzing badge appears: *"Comparing reflection against your past memories to identify growth or tension..."*.
@@ -303,11 +387,11 @@ gcloud run services update ask-my-past-self \
    - Click **"Open Memory in Vault"** to immediately navigate to the Memory Vault with that specific memory opened and highlighted.
    - Navigate to **"Journal History"** and verify that the entry card displays the proactive badge (e.g. *🌱 Growth*, *⚡ Tension*, or *🔗 Pattern*), and opening the entry reader modal renders the preserved insight card.
 
-7. **Conversational Multi-Turn Dialogue**:
+8. **Conversational Multi-Turn Dialogue**:
    - Switch to the **"Gemini Dialogue"** tab.
    - Attach a journal entry as grounding context from the dropdown or ask an open reflection prompt.
    - Verify that multi-turn dialogue maintains context and persists the conversation to Firestore.
 
-8. **Security & Sign-Out**:
+9. **Security & Sign-Out**:
    - Click **"Logout"** in the top bar.
    - Verify that the private dashboard unmounts immediately and resets to the Landing Page.
